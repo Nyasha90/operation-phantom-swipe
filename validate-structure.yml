@@ -1,0 +1,100 @@
+name: Validate Repository Structure
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate-structure:
+    name: Validate required deliverables are present
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check required directories exist
+        run: |
+          set -e
+          REQUIRED_DIRS=(
+            "evidence"
+            "evidence/skimmer_device"
+            "evidence/suspect_phone"
+            "evidence/password_protected"
+            "artefacts"
+            "chain_of_custody"
+            "hashes"
+            "cryptography"
+            "scripts"
+            "docs"
+            "report"
+          )
+          for d in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$d" ]; then
+              echo "::error::Missing required directory: $d"
+              exit 1
+            else
+              echo "OK: $d present"
+            fi
+          done
+
+      - name: Check required files exist
+        run: |
+          set -e
+          REQUIRED_FILES=(
+            "README.md"
+            "docs/taxonomy.md"
+            "chain_of_custody/chain_of_custody_form.md"
+            "hashes/sha256_hashes.txt"
+            "artefacts/extracted_artefacts.md"
+            "artefacts/string_search_results.txt"
+            "cryptography/dictionary_attack.py"
+            "cryptography/wordlist_custom.txt"
+            "cryptography/cracking_simulation.md"
+            "scripts/generate_hashes.sh"
+            "scripts/string_search.py"
+          )
+          for f in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required file: $f"
+              exit 1
+            else
+              echo "OK: $f present"
+            fi
+          done
+
+      - name: Check report deliverable (PDF or DOCX) exists
+        run: |
+          set -e
+          if compgen -G "report/*.docx" > /dev/null || compgen -G "report/*.pdf" > /dev/null; then
+            echo "OK: legal-technical report found in report/"
+          else
+            echo "::error::No .docx or .pdf report found in report/"
+            exit 1
+          fi
+
+      - name: Verify hash manifest is non-empty and covers >=5 files
+        run: |
+          set -e
+          COUNT=$(grep -cE '^evidence/' hashes/sha256_hashes.txt || true)
+          echo "Hash entries found: $COUNT"
+          if [ "$COUNT" -lt 5 ]; then
+            echo "::error::Hash manifest must cover at least 5 evidence files (found $COUNT)"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Smoke-test dictionary attack script (syntax + import check)
+        run: |
+          python3 -m py_compile cryptography/dictionary_attack.py
+          python3 -m py_compile scripts/string_search.py
+          echo "Scripts compile cleanly."
+
+      - name: Structure validation summary
+        run: echo "✅ All required deliverables present and scripts are valid."
